@@ -24,7 +24,6 @@ import java.util.function.Supplier;
 
 import static com.spotify.heroic.common.Optionals.firstPresent;
 
-
 @Data
 public class QueryHeatmap {
     private final Optional<String> query;

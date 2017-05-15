@@ -11,14 +11,13 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.spotify.heroic.common.DateRange;
 import com.spotify.heroic.common.Statistics;
 import com.spotify.heroic.metric.MetricCollection;
+import com.spotify.heroic.metric.MetricType;
+import com.spotify.heroic.metric.Point;
 import com.spotify.heroic.metric.QueryTrace;
 import com.spotify.heroic.metric.RequestError;
 import com.spotify.heroic.metric.ResultLimits;
 import com.spotify.heroic.metric.SeriesValues;
 import com.spotify.heroic.metric.ShardedResultGroup;
-import com.spotify.heroic.metric.Point;
-import com.spotify.heroic.metric.MetricType;
-
 import lombok.Data;
 import lombok.NonNull;
 
