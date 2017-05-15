@@ -1,0 +1,63 @@
+Index: heroic-core/src/main/java/com/spotify/heroic/http/query/QueryHeatmap.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- heroic-core/src/main/java/com/spotify/heroic/http/query/QueryHeatmap.java	(date 1494845421000)
++++ heroic-core/src/main/java/com/spotify/heroic/http/query/QueryHeatmap.java	(date 1494845622000)
+@@ -24,7 +24,6 @@
+ 
+ import static com.spotify.heroic.common.Optionals.firstPresent;
+ 
+-
+ @Data
+ public class QueryHeatmap {
+     private final Optional<String> query;
+Index: heroic-core/src/main/java/com/spotify/heroic/http/query/QueryHeatmapResponse.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- heroic-core/src/main/java/com/spotify/heroic/http/query/QueryHeatmapResponse.java	(date 1494845421000)
++++ heroic-core/src/main/java/com/spotify/heroic/http/query/QueryHeatmapResponse.java	(date 1494845622000)
+@@ -11,14 +11,13 @@
+ import com.spotify.heroic.common.DateRange;
+ import com.spotify.heroic.common.Statistics;
+ import com.spotify.heroic.metric.MetricCollection;
++import com.spotify.heroic.metric.MetricType;
++import com.spotify.heroic.metric.Point;
+ import com.spotify.heroic.metric.QueryTrace;
+ import com.spotify.heroic.metric.RequestError;
+ import com.spotify.heroic.metric.ResultLimits;
+ import com.spotify.heroic.metric.SeriesValues;
+ import com.spotify.heroic.metric.ShardedResultGroup;
+-import com.spotify.heroic.metric.Point;
+-import com.spotify.heroic.metric.MetricType;
+-
+ import lombok.Data;
+ import lombok.NonNull;
+ 
+Index: heroic-core/src/main/java/com/spotify/heroic/http/query/QueryResource.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- heroic-core/src/main/java/com/spotify/heroic/http/query/QueryResource.java	(date 1494845421000)
++++ heroic-core/src/main/java/com/spotify/heroic/http/query/QueryResource.java	(date 1494845622000)
+@@ -159,6 +159,16 @@
+                 r.getLimits()));
+     }
+ 
++    private void bindHeatmapResponse(
++        final AsyncResponse response, final AsyncFuture<QueryResult> callback
++    ) {
++        response.setTimeout(300, TimeUnit.SECONDS);
++
++        httpAsync.bind(response, callback,
++            r -> new QueryHeatmapResponse(r.getRange(), r.getGroups(), r.getErrors(), r.getTrace(),
++                r.getLimits()));
++    }
++
+     @Data
+     public static final class StreamId {
+         private final Map<String, String> tags;

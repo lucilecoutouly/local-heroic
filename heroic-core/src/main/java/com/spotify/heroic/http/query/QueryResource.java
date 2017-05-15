@@ -159,6 +159,16 @@ public class QueryResource {
                 r.getLimits()));
     }
 
+    private void bindHeatmapResponse(
+        final AsyncResponse response, final AsyncFuture<QueryResult> callback
+    ) {
+        response.setTimeout(300, TimeUnit.SECONDS);
+
+        httpAsync.bind(response, callback,
+            r -> new QueryHeatmapResponse(r.getRange(), r.getGroups(), r.getErrors(), r.getTrace(),
+                r.getLimits()));
+    }
+
     @Data
     public static final class StreamId {
         private final Map<String, String> tags;
