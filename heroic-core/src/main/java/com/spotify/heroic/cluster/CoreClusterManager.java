@@ -31,17 +31,11 @@ import com.spotify.heroic.lifecycle.LifeCycleRegistry;
 import com.spotify.heroic.lifecycle.LifeCycles;
 import com.spotify.heroic.metric.QueryTrace;
 import com.spotify.heroic.scheduler.Scheduler;
+import com.spotify.heroic.statistics.QueryReporter;
 import eu.toolchain.async.AsyncFramework;
 import eu.toolchain.async.AsyncFuture;
 import eu.toolchain.async.LazyTransform;
 import eu.toolchain.async.Transform;
-import lombok.Data;
-import lombok.ToString;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.tuple.Pair;
-
-import javax.inject.Inject;
-import javax.inject.Named;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -52,11 +46,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import javax.inject.Inject;
+import javax.inject.Named;
+import lombok.Data;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 
 /**
  * Handles management of cluster state.
@@ -81,6 +82,8 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
     private final HeroicConfiguration options;
     private final LocalClusterNode local;
     private final HeroicContext context;
+    private final Set<Map<String, String>> expectedTopology;
+    private final QueryReporter reporter;
 
     final AtomicReference<Set<URI>> staticNodes = new AtomicReference<>(new HashSet<>());
     final AtomicReference<NodeRegistry> registry = new AtomicReference<>();
@@ -93,7 +96,8 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
         AsyncFramework async, ClusterDiscovery discovery, NodeMetadata localMetadata,
         Map<String, RpcProtocol> protocols, Scheduler scheduler,
         @Named("useLocal") Boolean useLocal, HeroicConfiguration options, LocalClusterNode local,
-        HeroicContext context
+        HeroicContext context, @Named("topology") Set<Map<String, String>> expectedTopology,
+        final QueryReporter reporter
     ) {
         this.async = async;
         this.discovery = discovery;
@@ -104,6 +108,8 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
         this.options = options;
         this.local = local;
         this.context = context;
+        this.expectedTopology = expectedTopology;
+        this.reporter = reporter;
     }
 
     @Override
@@ -223,7 +229,7 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
 
         for (final Pair<Map<String, String>, List<ClusterNode>> e : findFromAllShards()) {
             shards.add(new ClusterShard(async, e.getKey(), ImmutableList.copyOf(
-                e.getValue().stream().map(c -> c.useOptionalGroup(group)).iterator())));
+                e.getValue().stream().map(c -> c.useOptionalGroup(group)).iterator()), reporter));
         }
 
         return shards.build();
@@ -274,7 +280,33 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
             throw new IllegalStateException("Registry not ready");
         }
 
-        return registry.findFromAllShards(OptionalLimit.empty());
+        final List<Pair<Map<String, String>, List<ClusterNode>>> shards =
+            registry.findFromAllShards(OptionalLimit.empty());
+
+        /* Topology (shards) is detected based on the metadata coming from the nodes. Any shards
+         * mentioned in 'topology' are required (shard error is raised if it isn't), additional
+         * shards may also exist tho. */
+        final Set<Map<String, String>> foundShards =
+            new HashSet<>(shards.stream().map(Pair::getKey).collect(Collectors.toList()));
+
+        final List<Map<String, String>> shardsWithNoNodes = expectedTopology
+            .stream()
+            .filter(e -> !foundShards.contains(e))
+            .collect(Collectors.toList());
+
+        if (shardsWithNoNodes.isEmpty()) {
+            return shards;
+        }
+
+        final List<Pair<Map<String, String>, List<ClusterNode>>> withExpected = new ArrayList<>();
+        withExpected.addAll(shards);
+        for (final Map<String, String> shard : shardsWithNoNodes) {
+            /* For every shard that didn't have a discovered node, add an empty entry in the
+             * shard list. This ensures that suitable code later on will complain that there
+             * were shards with no available nodes/groups. */
+            withExpected.add(Pair.of(shard, ImmutableList.of()));
+        }
+        return withExpected;
     }
 
     Set<Map<String, String>> extractKnownShards(Set<ClusterNode> entries) {
@@ -310,7 +342,7 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
 
             return async.resolved(new SuccessfulUpdate(uri, true,
                 new TracingClusterNode(node, new QueryTrace.Identifier(uri.toString()))));
-        }).catchFailed(Update.error(uri));
+        }).catchFailed(Update.error(uri)).catchCancelled(Update.cancellation(uri));
     }
 
     /**
@@ -372,13 +404,13 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
                  * otherwise, re-use the existing node */
                 updated.add(node.fetchMetadata().lazyTransform(m -> {
                     if (!node.metadata().equals(m)) {
-                            /* add to removedNodes list to make sure it is being closed */
+                        /* add to removedNodes list to make sure it is being closed */
                         removedNodes.add(new RemovedNode(uri, node));
                         return createClusterNode(id, uri);
                     }
 
                     return async.resolved(new SuccessfulUpdate(uri, false, node));
-                }).catchFailed(Update.error(uri)));
+                }).catchFailed(Update.error(uri)).catchCancelled(Update.cancellation(uri)));
             }
 
             /* all the nodes that have not been seen in the updates list of uris have been removed
@@ -416,7 +448,7 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
 
             updates.forEach(update -> {
                 update.handle(s -> {
-                    if (!s.isAdded()) {
+                    if (s.isAdded()) {
                         log.info("{} [new] {}", id, s.getUri());
                     }
 
@@ -425,6 +457,10 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
                     ok.add(s);
                 }, error -> {
                     log.error("{} [failed] {}", id, error.getUri(), error.getError());
+                    ClusterNode toRemove = oldClients.get(error.getUri());
+                    if (toRemove != null) {
+                        removals.add(toRemove.close());
+                    }
                 });
             });
 
@@ -491,6 +527,10 @@ public class CoreClusterManager implements ClusterManager, LifeCycles {
     interface Update {
         static Transform<Throwable, Update> error(final URI uri) {
             return e -> new FailedUpdate(uri, e);
+        }
+
+        static Transform<Void, Update> cancellation(final URI uri) {
+            return ignore -> new FailedUpdate(uri, new CancellationException());
         }
 
         /**

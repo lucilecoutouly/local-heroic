@@ -26,7 +26,7 @@ public interface FetchQuotaWatcher {
      * Indicates that backend has read {@code n} more datapoints.
      *
      * @param n The number of datapoints read by the backend.
-     * @throws QuotaViolationException if quota has been violated.
+     * @throws com.spotify.heroic.common.QuotaViolationException if quota has been violated.
      */
     void readData(long n);
 
@@ -41,13 +41,6 @@ public interface FetchQuotaWatcher {
      * Get how much data you are allowed to read.
      */
     int getReadDataQuota();
-
-    /**
-     * Indicates if any quota has been violated.
-     *
-     * @return {@code true} if any quota was violated, {@code false} otherwise.
-     */
-    boolean isQuotaViolated();
 
     /**
      * Special quota watcher indicating no quota should be applied.
@@ -65,11 +58,6 @@ public interface FetchQuotaWatcher {
         @Override
         public int getReadDataQuota() {
             return Integer.MAX_VALUE;
-        }
-
-        @Override
-        public boolean isQuotaViolated() {
-            return false;
         }
     };
 }

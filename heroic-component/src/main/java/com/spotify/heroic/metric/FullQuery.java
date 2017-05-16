@@ -27,14 +27,15 @@ import com.spotify.heroic.QueryOptions;
 import com.spotify.heroic.aggregation.AggregationInstance;
 import com.spotify.heroic.cluster.ClusterShard;
 import com.spotify.heroic.common.DateRange;
+import com.spotify.heroic.common.Features;
 import com.spotify.heroic.common.Statistics;
 import com.spotify.heroic.filter.Filter;
+import com.spotify.heroic.querylogging.QueryContext;
 import eu.toolchain.async.Collector;
 import eu.toolchain.async.Transform;
+import java.util.List;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
 
 @Slf4j
 @Data
@@ -79,16 +80,33 @@ public final class FullQuery {
     }
 
     public static Transform<Throwable, FullQuery> shardError(
-        final QueryTrace.Identifier what, final ClusterShard c
+        final QueryTrace.NamedWatch watch, final ClusterShard c
     ) {
-        final QueryTrace.NamedWatch w = QueryTrace.watch(what);
-        return e -> new FullQuery(w.end(), ImmutableList.of(ShardError.fromThrowable(c, e)),
+        return e -> new FullQuery(watch.end(), ImmutableList.of(ShardError.fromThrowable(c, e)),
             ImmutableList.of(), Statistics.empty(), ResultLimits.of());
     }
 
     public static Transform<FullQuery, FullQuery> trace(final QueryTrace.Identifier what) {
         final QueryTrace.NamedWatch w = QueryTrace.watch(what);
         return r -> new FullQuery(w.end(r.trace), r.errors, r.groups, r.statistics, r.limits);
+    }
+
+    public FullQuery withTrace(QueryTrace newTrace) {
+        return new FullQuery(newTrace, errors, groups, statistics, limits);
+    }
+
+    public Summary summarize() {
+        return new Summary(trace, errors, ResultGroup.summarize(groups), statistics, limits);
+    }
+
+    // Only include data suitable to log to query log
+    @Data
+    public class Summary {
+        private final QueryTrace trace;
+        private final List<RequestError> errors;
+        private final ResultGroup.MultiSummary groups;
+        private final Statistics statistics;
+        private final ResultLimits limits;
     }
 
     @Data
@@ -98,5 +116,20 @@ public final class FullQuery {
         private final DateRange range;
         private final AggregationInstance aggregation;
         private final QueryOptions options;
+        private final QueryContext context;
+        private final Features features;
+
+        public Summary summarize() {
+            return new Summary(source, filter, range, aggregation, options);
+        }
+
+        @Data
+        public class Summary {
+            private final MetricType source;
+            private final Filter filter;
+            private final DateRange range;
+            private final AggregationInstance aggregation;
+            private final QueryOptions options;
+        }
     }
 }
