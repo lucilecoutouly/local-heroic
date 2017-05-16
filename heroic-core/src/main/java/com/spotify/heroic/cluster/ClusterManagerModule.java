@@ -21,6 +21,10 @@
 
 package com.spotify.heroic.cluster;
 
+import static com.spotify.heroic.common.Optionals.pickOptional;
+import static java.util.Optional.empty;
+import static java.util.Optional.of;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
@@ -32,15 +36,11 @@ import com.spotify.heroic.lifecycle.LifeCycle;
 import com.spotify.heroic.lifecycle.LifeCycleManager;
 import com.spotify.heroic.metadata.MetadataComponent;
 import com.spotify.heroic.metric.MetricComponent;
+import com.spotify.heroic.statistics.HeroicReporter;
+import com.spotify.heroic.statistics.QueryReporter;
 import com.spotify.heroic.suggest.SuggestComponent;
 import dagger.Module;
 import dagger.Provides;
-import lombok.AccessLevel;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.apache.commons.lang3.tuple.Pair;
-
-import javax.inject.Named;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -48,10 +48,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-
-import static com.spotify.heroic.common.Optionals.pickOptional;
-import static java.util.Optional.empty;
-import static java.util.Optional.of;
+import javax.inject.Named;
+import lombok.AccessLevel;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.tuple.Pair;
 
 /**
  * @author udoprog
@@ -93,6 +94,12 @@ public class ClusterManagerModule {
     @Named("topology")
     public Set<Map<String, String>> topology() {
         return topology;
+    }
+
+    @Provides
+    @ClusterScope
+    public QueryReporter queryReporter(HeroicReporter heroicReporter) {
+        return heroicReporter.newQueryReporter();
     }
 
     @Provides

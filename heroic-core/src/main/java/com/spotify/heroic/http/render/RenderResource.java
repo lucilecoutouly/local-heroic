@@ -23,9 +23,13 @@ package com.spotify.heroic.http.render;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spotify.heroic.Query;
+import com.spotify.heroic.querylogging.QueryContext;
 import com.spotify.heroic.QueryManager;
 import com.spotify.heroic.metric.QueryResult;
+
+import com.spotify.heroic.http.query.QueryHeatmap;
 import org.jfree.chart.JFreeChart;
+
 
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
@@ -37,9 +41,7 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.util.Map;
+import org.jfree.chart.JFreeChart;
 
 @Path("render")
 public class RenderResource {
@@ -87,12 +89,58 @@ public class RenderResource {
             highlight = null;
         }
 
+        final QueryContext queryContext = QueryContext.empty();
+        final Query q = query.newQueryFromString(queryString).build();
+
+        final QueryResult result = this.query.useGroup(backendGroup).query(q, queryContext).get();
+
+        final JFreeChart chart =
+            RenderUtils.createChart(result.getGroups(), title, highlight, threshold, height);
+
+        final BufferedImage image = chart.createBufferedImage(width, height);
+
+        final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", buffer);
+
+        return Response.ok(buffer.toByteArray()).build();
+    }
+
+    @SuppressWarnings("unchecked")
+    @GET
+    @Path("heatmap")
+    @Produces("image/png")
+    public Response heatmap(
+        @QueryParam("q") String queryString, @QueryParam("backend") String backendGroup,
+        @QueryParam("title") String title, @QueryParam("width") Integer width,
+        @QueryParam("height") Integer height, @QueryParam("highlight") String highlightRaw,
+        @QueryParam("threshold") Double threshold
+    ) throws Exception {
+        if (query == null) {
+            throw new BadRequestException("'query' must be defined");
+        }
+
+        if (width == null) {
+            width = DEFAULT_WIDTH;
+        }
+
+        if (height == null) {
+            height = DEFAULT_HEIGHT;
+        }
+
+        final Map<String, String> highlight;
+
+        if (highlightRaw != null) {
+            highlight = mapper.readValue(highlightRaw, Map.class);
+        } else {
+            highlight = null;
+        }
+
         final Query q = query.newQueryFromString(queryString).build();
 
         final QueryResult result = this.query.useGroup(backendGroup).query(q).get();
 
         final JFreeChart chart =
-            RenderUtils.createChart(result.getGroups(), title, highlight, threshold, height);
+            HeatmapUtil.createChart(result.getGroups(), title, highlight, threshold, height);
 
         final BufferedImage image = chart.createBufferedImage(width, height);
 

@@ -21,7 +21,6 @@
 
 package com.spotify.heroic.elasticsearch;
 
-import com.spotify.heroic.common.DateRange;
 import com.spotify.heroic.elasticsearch.index.IndexMapping;
 import com.spotify.heroic.elasticsearch.index.NoIndexSelectedException;
 import eu.toolchain.async.AsyncFramework;
@@ -111,26 +110,26 @@ public class Connection {
         return future;
     }
 
-    public String[] readIndices(DateRange range) throws NoIndexSelectedException {
-        return index.readIndices(range);
+    public String[] readIndices() throws NoIndexSelectedException {
+        return index.readIndices();
     }
 
-    public String[] writeIndices(DateRange range) throws NoIndexSelectedException {
-        return index.writeIndices(range);
+    public String[] writeIndices() throws NoIndexSelectedException {
+        return index.writeIndices();
     }
 
-    public SearchRequestBuilder search(DateRange range, String type)
+    public SearchRequestBuilder search(String type)
         throws NoIndexSelectedException {
-        return index.search(client, range, type);
+        return index.search(client, type);
     }
 
-    public CountRequestBuilder count(DateRange range, String type) throws NoIndexSelectedException {
-        return index.count(client, range, type);
+    public CountRequestBuilder count(String type) throws NoIndexSelectedException {
+        return index.count(client, type);
     }
 
-    public DeleteByQueryRequestBuilder deleteByQuery(DateRange range, String type)
+    public DeleteByQueryRequestBuilder deleteByQuery(String type)
         throws NoIndexSelectedException {
-        return index.deleteByQuery(client, range, type);
+        return index.deleteByQuery(client, type);
     }
 
     public IndexRequestBuilder index(String index, String type) {

@@ -27,9 +27,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.spotify.heroic.common.OptionalLimit;
 import eu.toolchain.async.AsyncFramework;
-import lombok.Data;
-import org.apache.commons.lang3.tuple.Pair;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -38,10 +35,12 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import lombok.Data;
+import org.apache.commons.lang3.tuple.Pair;
 
 @Data
 public class NodeRegistry {
-    private static final Random random = new Random(System.currentTimeMillis());
+    private static final Random random = new Random();
 
     private final AsyncFramework async;
     private final List<ClusterNode> entries;
@@ -82,12 +81,12 @@ public class NodeRegistry {
     ) {
         final List<Pair<Map<String, String>, List<ClusterNode>>> result = Lists.newArrayList();
 
-        final Multimap<Map<String, String>, ClusterNode> shards = buildShards(entries);
+        final Multimap<Map<String, String>, ClusterNode> shardToNode = buildShards(entries);
 
-        final Set<Entry<Map<String, String>, Collection<ClusterNode>>> entries =
-            shards.asMap().entrySet();
+        final Set<Entry<Map<String, String>, Collection<ClusterNode>>> shardToNodeEntries =
+            shardToNode.asMap().entrySet();
 
-        for (final Entry<Map<String, String>, Collection<ClusterNode>> e : entries) {
+        for (final Entry<Map<String, String>, Collection<ClusterNode>> e : shardToNodeEntries) {
             result.add(Pair.of(e.getKey(), pickN(e.getValue(), n)));
         }
 

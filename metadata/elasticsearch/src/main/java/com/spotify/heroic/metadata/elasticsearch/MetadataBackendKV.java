@@ -173,13 +173,12 @@ public class MetadataBackendKV extends AbstractElasticsearchMetadataBackend
     public AsyncFuture<WriteMetadata> write(final WriteMetadata.Request request) {
         return doto(c -> {
             final Series series = request.getSeries();
-            final DateRange range = request.getRange();
             final String id = series.hash();
 
             final String[] indices;
 
             try {
-                indices = c.writeIndices(range);
+                indices = c.writeIndices();
             } catch (NoIndexSelectedException e) {
                 return async.failed(e);
             }
@@ -227,7 +226,7 @@ public class MetadataBackendKV extends AbstractElasticsearchMetadataBackend
 
             final FilterBuilder f = filter(filter.getFilter());
 
-            final CountRequestBuilder builder = c.count(filter.getRange(), TYPE_METADATA);
+            final CountRequestBuilder builder = c.count(TYPE_METADATA);
             limit.asInteger().ifPresent(builder::setTerminateAfter);
 
             builder.setQuery(QueryBuilders.filteredQuery(QueryBuilders.matchAllQuery(), f));
@@ -275,7 +274,7 @@ public class MetadataBackendKV extends AbstractElasticsearchMetadataBackend
             final FilterBuilder f = filter(request.getFilter());
 
             final DeleteByQueryRequestBuilder builder =
-                c.deleteByQuery(request.getRange(), TYPE_METADATA);
+                c.deleteByQuery(TYPE_METADATA);
 
             builder.setQuery(QueryBuilders.filteredQuery(QueryBuilders.matchAllQuery(), f));
 
@@ -289,7 +288,7 @@ public class MetadataBackendKV extends AbstractElasticsearchMetadataBackend
             final FilterBuilder f = filter(request.getFilter());
 
             final SearchRequestBuilder builder =
-                c.search(request.getRange(), TYPE_METADATA).setSearchType("count");
+                c.search(TYPE_METADATA).setSearchType("count");
 
             builder.setQuery(QueryBuilders.filteredQuery(QueryBuilders.matchAllQuery(), f));
 
@@ -341,7 +340,7 @@ public class MetadataBackendKV extends AbstractElasticsearchMetadataBackend
 
         return doto(c -> {
             final SearchRequestBuilder builder = c
-                .search(range, TYPE_METADATA)
+                .search(TYPE_METADATA)
                 .setScroll(SCROLL_TIME)
                 .setSearchType(SearchType.SCAN);
 
@@ -363,7 +362,7 @@ public class MetadataBackendKV extends AbstractElasticsearchMetadataBackend
 
         return observer -> connection.doto(c -> {
             final SearchRequestBuilder builder = c
-                .search(range, TYPE_METADATA)
+                .search(TYPE_METADATA)
                 .setScroll(SCROLL_TIME)
                 .setSearchType(SearchType.SCAN);
 
@@ -487,7 +486,7 @@ public class MetadataBackendKV extends AbstractElasticsearchMetadataBackend
                 return regexpFilter(TAGS,
                     regex.getTag() + TAG_DELIMITER + regex.getValue());
             }
-            
+
             @Override
             public FilterBuilder visitHasTag(final HasTagFilter hasTag) {
                 return termFilter(TAG_KEYS, hasTag.getTag());
